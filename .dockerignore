@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+admin/node_modules
+.DS_Store
+.env
+.env.*
+*.log
+coverage
+dist
+bin
+.tmp
+tmp
+/data
+.gbrain
