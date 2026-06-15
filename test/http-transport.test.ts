@@ -251,6 +251,28 @@ describe('http-transport: auth', () => {
     expect(r.status).toBe(401);
   });
 
+  test('5b. X-GBrain-API-Key header → 200', async () => {
+    const r = await fetch(`${srv.url}/mcp`, {
+      method: 'POST',
+      headers: { 'X-GBrain-API-Key': VALID_TOKEN, 'Content-Type': 'application/json' },
+      body: rpc('tools/list'),
+    });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.result.tools).toBeArray();
+  });
+
+  test('5c. X-API-Key header → 200', async () => {
+    const r = await fetch(`${srv.url}/mcp`, {
+      method: 'POST',
+      headers: { 'X-API-Key': VALID_TOKEN, 'Content-Type': 'application/json' },
+      body: rpc('tools/list'),
+    });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.result.tools).toBeArray();
+  });
+
   test('6. /health → 200 without auth, body has expected fields, probes DB', async () => {
     const r = await fetch(`${srv.url}/health`);
     expect(r.status).toBe(200);
@@ -401,6 +423,8 @@ describe('http-transport: CORS', () => {
         expect(r.headers.get('access-control-allow-origin')).toBe('https://claude.ai');
         expect(r.headers.get('access-control-allow-methods')).toContain('POST');
         expect(r.headers.get('access-control-allow-headers')).toContain('Authorization');
+        expect(r.headers.get('access-control-allow-headers')).toContain('X-GBrain-API-Key');
+        expect(r.headers.get('access-control-allow-headers')).toContain('X-API-Key');
         expect(r.headers.get('vary')).toBe('Origin');
       } finally { srv.stop(); }
     });

@@ -6,7 +6,8 @@
  * engines (see src/core/pglite-schema.ts:478,495 and src/schema.sql).
  *
  * Security model:
- *   - Every request must include `Authorization: Bearer <token>` (except /health)
+ *   - Every request must include `Authorization: Bearer <token>` OR
+ *     `X-GBrain-API-Key: <token>` / `X-API-Key: <token>` (except /health)
  *   - Tokens are validated against SHA-256 hashes in the access_tokens table
  *   - Create/manage tokens with auth.ts (gbrain auth create/list/revoke)
  *   - No open OAuth, no client_credentials, no self-service tokens
@@ -51,6 +52,16 @@ function parseCorsAllowlist(): Set<string> | null {
   const v = process.env.GBRAIN_HTTP_CORS_ORIGIN;
   if (!v) return null;
   return new Set(v.split(',').map(s => s.trim()).filter(Boolean));
+}
+
+function presentedToken(headers: Headers): string | null {
+  const authHeader = headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7);
+  for (const name of ['x-gbrain-api-key', 'x-api-key']) {
+    const value = headers.get(name)?.trim();
+    if (value) return value;
+  }
+  return null;
 }
 
 interface HttpTransportOptions {
@@ -166,15 +177,15 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
       headers['Vary'] = 'Origin';
       if (preflight) {
         headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
-        headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept';
+        headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-GBrain-API-Key, X-API-Key';
       }
     }
     return headers;
   }
 
-  async function validateToken(authHeader: string | null): Promise<AuthResult> {
-    if (!authHeader?.startsWith('Bearer ')) return { ok: false };
-    const token = authHeader.slice(7);
+  async function validateToken(headers: Headers): Promise<AuthResult> {
+    const token = presentedToken(headers);
+    if (!token) return { ok: false };
     const hash = hashToken(token);
     try {
       const [row] = await sql`
@@ -283,11 +294,11 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
       }
 
       // Auth.
-      const auth = await validateToken(req.headers.get('Authorization'));
+      const auth = await validateToken(req.headers);
       if (!auth.ok) {
         logRequest(null, 'unknown', 'auth_failed', Date.now() - startedMs);
         return Response.json(
-          { error: 'invalid_token', message: 'Bearer token required. Create one: gbrain auth create <name>' },
+          { error: 'invalid_token', message: 'Token required via Authorization: Bearer <token> or X-GBrain-API-Key. Create one: gbrain auth create <name>' },
           { status: 401, headers: corsHeaders(origin) },
         );
       }
@@ -382,7 +393,7 @@ export async function startHttpTransport(opts: HttpTransportOptions) {
   console.error(`GBrain HTTP MCP server running on port ${port}`);
   console.error(`  Health: http://localhost:${port}/health`);
   console.error(`  MCP:    http://localhost:${port}/mcp`);
-  console.error(`  Auth:   Bearer token required (create with: gbrain auth create <name>)`);
+  console.error(`  Auth:   Authorization: Bearer <token> or X-GBrain-API-Key (create with: gbrain auth create <name>)`);
   if (!corsAllowlist) {
     console.error('  CORS:   default-deny. Set GBRAIN_HTTP_CORS_ORIGIN=https://your.app to allow browser clients.');
   } else {

@@ -255,6 +255,18 @@ export function resolveCorsOrigin(allowlist: Set<string> | null): cors.CorsOptio
   };
 }
 
+const API_KEY_HEADER_NAMES = ['x-gbrain-api-key', 'x-api-key'] as const;
+
+function bearerFromApiKeyHeaders(req: Request): string | null {
+  for (const name of API_KEY_HEADER_NAMES) {
+    const raw = req.headers[name];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    if (trimmed) return `Bearer ${trimmed}`;
+  }
+  return null;
+}
+
 interface ServeHttpOptions {
   port: number;
   tokenTtl: number;
@@ -530,7 +542,7 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
     origin: resolveCorsOrigin(corsAllowlistOAuth),
     credentials: false,
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-GBrain-API-Key', 'X-API-Key'],
   };
   app.use('/mcp', cors(corsOAuthOptions));
   app.use('/token', cors(corsOAuthOptions));
@@ -1402,6 +1414,14 @@ export async function runServeHttp(engine: BrainEngine, options: ServeHttpOption
   app.get('/mcp', (_req: Request, res: Response) => {
     res.set('Allow', 'POST, DELETE');
     res.status(405).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed' }, id: null });
+  });
+
+  app.use('/mcp', (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.headers.authorization) {
+      const bearer = bearerFromApiKeyHeaders(req);
+      if (bearer) req.headers.authorization = bearer;
+    }
+    next();
   });
 
   app.post('/mcp', requireBearerAuth({ verifier: oauthProvider }), async (req: Request, res: Response) => {

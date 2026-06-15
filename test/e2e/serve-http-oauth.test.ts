@@ -140,6 +140,18 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     });
   }
 
+  async function mcpCallWithApiKey(token: string, method: string, params?: any): Promise<Response> {
+    return fetch(`${BASE}/mcp`, {
+      method: 'POST',
+      headers: {
+        'X-GBrain-API-Key': token,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, ...(params ? { params } : {}) }),
+    });
+  }
+
   // =========================================================================
   // Fix 1: client_credentials tokens validate at /mcp
   // =========================================================================
@@ -176,6 +188,16 @@ describeE2E('serve-http OAuth 2.1 E2E (v0.26.1 + v0.26.2 + v0.26.3)', () => {
     // Should contain search results, not an auth error
     expect(body).not.toContain('invalid_token');
     expect(body).toContain('result');
+  }, 15_000);
+
+  test('minted token is accepted via X-GBrain-API-Key at /mcp', async () => {
+    const { access_token } = await mintToken('read');
+    const res = await mcpCallWithApiKey(access_token, 'tools/list');
+
+    expect(res.status).not.toBe(401);
+    const body = await res.text();
+    expect(body).toContain('tools');
+    expect(body).toContain('search');
   }, 15_000);
 
   test('expired/invalid token is rejected at /mcp', async () => {

@@ -100,6 +100,18 @@ describeE2E('http-transport E2E (real Postgres)', () => {
     expect(r.headers.get('content-type')).toContain('application/json');
   });
 
+  test('2b. /mcp tools/list with X-GBrain-API-Key → 200 + ops list', async () => {
+    const r = await fetch(`http://localhost:${srv.port}/mcp`, {
+      method: 'POST',
+      headers: { 'X-GBrain-API-Key': validToken, 'Content-Type': 'application/json' },
+      body: rpc('tools/list'),
+    });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.result.tools).toBeArray();
+    expect(body.result.tools.length).toBeGreaterThan(5);
+  });
+
   test('3. /mcp tools/call (real op: list_pages) round-trips successfully — F1+F2+F3 guard', async () => {
     const r = await fetch(`http://localhost:${srv.port}/mcp`, {
       method: 'POST',
